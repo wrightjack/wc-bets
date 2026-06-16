@@ -32,8 +32,10 @@ const { useState, useMemo, useEffect, useCallback } = React;
 
 const SUPABASE_URL = "https://zwmeinfamljbgsrebrnn.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3bWVpbmZhbWxqYmdzcmVicm5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExOTE5ODYsImV4cCI6MjA5Njc2Nzk4Nn0.yEdZZHrP47TPuPUNlkVNYDdq0g1a7ujmKIk_3azxchU";
+const FOOTBALL_API_KEY = "c24c6075bad741b58adb6f035353205b";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const COMPS = [2000, 2021, 2018];
+const CORS = "https://corsproxy.io/?url=";
 
 const toDb = (bet, uid) => ({
   id: bet.id, user_id: uid, match: bet.match, selection: bet.selection,
@@ -138,7 +140,7 @@ function FixtureModal({ match, comp, onClose }) {
     (async () => {
       setPredLoading(true); setPredError(null);
       try {
-        const res = await fetch("/api/predict", {
+        const res = await fetch("/.netlify/functions/predict", {
           method:"POST",
           headers:{"Content-Type":"application/json"},
           body: JSON.stringify({ home, away, competition: comp.name })
@@ -155,7 +157,7 @@ function FixtureModal({ match, comp, onClose }) {
     (async () => {
       setOddsLoading(true);
       try {
-        const res = await fetch("/api/odds", {
+        const res = await fetch("/.netlify/functions/odds", {
           method:"POST",
           headers:{"Content-Type":"application/json"},
           body: JSON.stringify({ home, away })
@@ -293,11 +295,8 @@ function FixturesTab() {
     const all = [];
     for (let i=0; i<COMPS.length; i++) {
       try {
-        const res = await fetch("/api/fixtures", {
-          method: "POST",
-          headers: {"Content-Type":"application/json"},
-          body: JSON.stringify({ comp: COMPS[i], date: d })
-        });
+        const base = "https://api.football-data.org/v4/competitions/"+COMPS[i]+"/matches?dateFrom="+d+"&dateTo="+d;
+        const res = await fetch(CORS+encodeURIComponent(base), { headers:{"X-Auth-Token":FOOTBALL_API_KEY} });
         if (res.ok) {
           const data = await res.json();
           if (data.matches&&data.matches.length>0) data.matches.forEach(m=>all.push({match:m,comp:data.competition}));
