@@ -11,34 +11,43 @@ export default async function handler(req, res) {
     if (typeof body === "string") body = JSON.parse(body);
     const { home, away, competition } = body;
 
-    const prompt =
-      "You are a football analyst. Give a concise match prediction for " +
-      home + " vs " + away + " in the " + (competition || "football") +
-      ". Respond ONLY with a valid JSON object with these exact keys: " +
-      "predicted_winner (must be exactly Home, Draw, or Away), " +
-      "predicted_score (e.g. 2-1), " +
-      "confidence (must be exactly Low, Medium, or High), " +
-      "key_factors (array of 3 strings), " +
-      "summary (2-3 sentence string). " +
-      "No markdown, no backticks, no extra text. Only the JSON object.";
-
     const url = "https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=" + process.env.GEMINI_API_KEY;
 
     const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
+        contents: [{ parts: [{ text:
+          "You are a football analyst. Predict " + home + " vs " + away + " in " + (competition || "football") + ". " +
+          "Reply with ONLY this JSON, no other text: " +
+          "{\"predicted_winner\":\"Draw\",\"predicted_score\":\"1-1\",\"confidence\":\"Medium\",\"key_factors\":[\"factor1\",\"factor2\",\"factor3\"],\"summary\":\"Your analysis here.\"}"
+        }] }],
         generationConfig: { temperature: 0.4, maxOutputTokens: 600 }
       })
     });
 
-    const data = await response.json();
-    if (!response.ok) return res.status(500).json({ error: "Gemini API error", details: data });
+    const raw = await response.text();
+    
+    if (!response.ok) {
+      return res.status(200).json({
+        predicted_winner: "Draw", predicted_score: "?-?", confidence: "Low",
+        key_factors: ["API error: " + response.status], summary: raw.slice(0, 200)
+      });
+    }
 
+    const data = JSON.parse(raw);
     const text = (data.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
     const cleaned = text.replace(/```json|```/g, "").trim();
-    const prediction = JSON.parse(cleaned);
+
+    let prediction;
+    try {
+      prediction = JSON.parse(cleaned);
+    } catch(parseErr) {
+      return res.status(200).json({
+        predicted_winner: "Draw", predicted_score: "?-?", confidence: "Low",
+        key_factors: ["Could not parse response"], summary: cleaned.slice(0, 300)
+      });
+    }
 
     return res.status(200).json({
       predicted_winner: prediction.predicted_winner || "Draw",
@@ -47,7 +56,11 @@ export default async function handler(req, res) {
       key_factors: Array.isArray(prediction.key_factors) ? prediction.key_factors : ["No factors available"],
       summary: prediction.summary || "No analysis available."
     });
+
   } catch (e) {
-    return res.status(500).json({ error: e.message });
+    return res.status(200).json({
+      predicted_winner: "Draw", predicted_score: "?-?", confidence: "Low",
+      key_factors: ["Error: " + e.message], summary: "Something went wrong."
+    });
   }
 }
