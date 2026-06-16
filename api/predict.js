@@ -7,11 +7,15 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    const { home, away, competition } = req.body;
+    let body = req.body;
+    if (typeof body === "string") body = JSON.parse(body);
+    const { home, away, competition } = body;
+
+    if (!home || !away) return res.status(400).json({ error: "Missing home or away" });
 
     const prompt =
       "You are a football analyst. Give a concise match prediction for " +
-      home + " vs " + away + " in the " + competition +
+      home + " vs " + away + " in the " + (competition || "football") +
       ". Respond ONLY with a JSON object, no markdown, no backticks. Format: " +
       '{"predicted_winner":"Home|Draw|Away","predicted_score":"X-X","confidence":"Low|Medium|High","key_factors":["factor1","factor2","factor3"],"summary":"2-3 sentence analysis"}';
 
@@ -27,15 +31,9 @@ export default async function handler(req, res) {
     });
 
     const data = await response.json();
+    if (!response.ok) return res.status(500).json({ error: "Gemini error", details: data });
 
-    // Log full response for debugging
-    if (!response.ok) {
-      return res.status(500).json({ error: "Gemini error", details: data });
-    }
-
-    const text = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]
-      ? data.candidates[0].content.parts[0].text : "";
-
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
     const prediction = JSON.parse(text.replace(/```json|```/g, "").trim());
     return res.status(200).json(prediction);
   } catch (e) {
